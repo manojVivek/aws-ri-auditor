@@ -1,10 +1,12 @@
 package io.cloudthrift.awsriauditor;
 
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.services.ec2.model.Instance;
@@ -37,18 +39,34 @@ public class RIAuditor {
     public RIAuditorResult runAuditing(List<ReservedInstances> reserveInstances, List<Instance> instances) {
 	RIAuditorResult result = new RIAuditorResult();
 	Map<String, ReservedInstances> reservedInstancesMap = constructMap(reserveInstances);
-	List<Instance> sortedInstances = sortInstancesBasedOnRunningTime(instances);
+	List<Instance> sortedInstances = sortInstancesBasedOnRunningTime(instances),remainingInstances = new ArrayList<>();
 	for (Instance instance : sortedInstances) {
 	    String key = constructKey(instance);
 	    ReservedInstances reservedInstance = reservedInstancesMap.get(key);
 	    if (reservedInstance != null && reservedInstance.getInstanceCount() > 0) {
 		reservedInstance.setInstanceCount(reservedInstance.getInstanceCount() - 1);
-		// TODO add these instances to the green list of result
+		result.addToInstancesWithEffectiveRI(instance);
+	    }else{
+		remainingInstances.add(instance);
 	    }
 	}
-	// TODO add the remaining instances to the red & yellow list of the
-	// result
+	Date weekOld = getWeekOldDate();
+	result.setInstancesThatNeedRI(remainingInstances.stream()
+		.filter((instance) -> instance.getLaunchTime().before(weekOld)).collect(Collectors.toList()));
+	
+	result.setUnUsedRI(reserveInstances.stream()
+		.filter((reservedInstance) -> reservedInstance.getInstanceCount() > 0).collect(Collectors.toList()));
+
 	return result;
+    }
+
+    /**
+     * @return
+     */
+    private Date getWeekOldDate() {
+	Calendar cal = Calendar.getInstance();
+	cal.add(Calendar.DATE, -7);
+	return cal.getTime();
     }
 
     /**
@@ -56,10 +74,10 @@ public class RIAuditor {
      * @return
      */
     private List<Instance> sortInstancesBasedOnRunningTime(List<Instance> instances) {
-	// TODO removed the spot instances if any in the list
-	List<Instance> sortedInstances = new ArrayList<>(instances);
-	Collections.sort(sortedInstances, (i1, i2) -> i1.getLaunchTime().compareTo(i2.getLaunchTime()));
-	return sortedInstances;
+	
+	return instances.stream().filter((instance) -> instance.getSpotInstanceRequestId() != null)
+		.sorted((i1, i2) -> i1.getLaunchTime().compareTo(i2.getLaunchTime())).collect(Collectors.toList());
+	
     }
 
     /**
