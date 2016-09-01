@@ -75,7 +75,7 @@ public class RIAuditor {
      */
     private List<Instance> sortInstancesBasedOnRunningTime(List<Instance> instances) {
 	
-	return instances.stream().filter((instance) -> instance.getSpotInstanceRequestId() != null)
+	return instances.stream().filter((instance) -> instance.getSpotInstanceRequestId() == null)
 		.sorted((i1, i2) -> i1.getLaunchTime().compareTo(i2.getLaunchTime())).collect(Collectors.toList());
 	
     }
